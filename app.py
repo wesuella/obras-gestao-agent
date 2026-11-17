@@ -386,6 +386,51 @@ def webhook():
     return jsonify({"status": "ok"}), 200
 
 
+@app.route("/static/manifest.json")
+def manifest():
+    return jsonify({
+        "name": "Obras Gestão - Atendimento",
+        "short_name": "Obras Gestão",
+        "description": "Painel de atendimento do bot Obras Gestão",
+        "start_url": "/admin",
+        "display": "standalone",
+        "background_color": "#0f172a",
+        "theme_color": "#fbbf24",
+        "orientation": "portrait",
+        "icons": [
+            {
+                "src": "https://cdn-icons-png.flaticon.com/512/1087/1087815.png",
+                "sizes": "512x512",
+                "type": "image/png",
+                "purpose": "any maskable"
+            }
+        ]
+    })
+
+@app.route("/static/sw.js")
+def sw():
+    sw_code = """
+const CACHE_NAME = 'obras-gestao-v1';
+self.addEventListener('install', event => { self.skipWaiting(); });
+self.addEventListener('activate', event => { event.waitUntil(clients.claim()); });
+self.addEventListener('push', event => {
+  const data = event.data ? event.data.json() : {title: 'Novo atendimento!', body: 'Cliente quer falar com humano'};
+  const options = {
+    body: data.body,
+    icon: 'https://cdn-icons-png.flaticon.com/512/1087/1087815.png',
+    badge: 'https://cdn-icons-png.flaticon.com/512/1087/1087815.png',
+    vibrate: [200, 100, 200],
+    data: {url: '/admin'}
+  };
+  event.waitUntil(self.registration.showNotification(data.title, options));
+});
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  event.waitUntil(clients.openWindow('/admin'));
+});
+"""
+    return app.response_class(sw_code, mimetype='application/javascript')
+
 @app.route("/admin", methods=["GET"])
 def admin_panel():
     html = """
@@ -395,6 +440,13 @@ def admin_panel():
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Obras Gestão - Painel Atendimento</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="theme-color" content="#fbbf24">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Obras Gestão">
+<link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/1087/1087815.png">
+
 <style>
 body{font-family: Arial, sans-serif; background:#0f172a; color:#fff; margin:0; padding:20px}
 h1{color:#fbbf24; text-align:center}
@@ -418,6 +470,19 @@ a{color:#fbbf24}
 <div style="text-align:center; margin:20px">
 <a href="/">Ver status do bot</a> | <a href="/admin">Atualizar</a>
 </div>
+<div id="contador" style="display:none; background:#ef4444; color:#fff; padding:15px; border-radius:12px; text-align:center; font-weight:bold; margin:10px 0; animation: pulse 1s infinite">
+</div>
+<div style="text-align:center; margin:10px 0">
+<button id="installBtn" onclick="instalarPWA()" style="display:none; background:#3b82f6; margin:5px">📲 Baixar no Celular (PWA)</button>
+<button id="notifBtn" onclick="pedirPermissaoNotificacao()" style="display:none; background:#f59e0b; margin:5px">🔔 Ativar Notificações igual Zap</button>
+</div>
+<style>
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+  100% { transform: scale(1); }
+}
+</style>
 """
     if not conversas:
         html += "<div class='card'><p>Nenhuma conversa ainda. Mande um Oi pro 28 99252-5654</p></div>"
@@ -451,6 +516,107 @@ a{color:#fbbf24}
             html += "</div>"
     
     html += """
+
+<script>
+// PWA Install
+let deferredPrompt;
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  document.getElementById('installBtn').style.display = 'block';
+});
+
+function instalarPWA() {
+  if (deferredPrompt) {
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then((choiceResult) => {
+      if (choiceResult.outcome === 'accepted') {
+        console.log('PWA instalado');
+      }
+      deferredPrompt = null;
+      document.getElementById('installBtn').style.display = 'none';
+    });
+  }
+}
+
+// Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/static/sw.js')
+    .then(reg => console.log('SW registrado', reg))
+    .catch(err => console.log('SW erro', err));
+}
+
+// Notificações
+function pedirPermissaoNotificacao() {
+  if ('Notification' in window) {
+    Notification.requestPermission().then(permission => {
+      if (permission === 'granted') {
+        console.log('Notificação permitida');
+        document.getElementById('notifBtn').innerHTML = '🔔 Notificações Ativas';
+        document.getElementById('notifBtn').style.background = '#22c55e';
+      }
+    });
+  }
+}
+
+function notificarNovoAtendimento(cliente, motivo) {
+  if (Notification.permission === 'granted') {
+    const notification = new Notification('🔔 Novo atendimento! Obras Gestão', {
+      body: `Cliente +${cliente} quer falar com humano: ${motivo}`,
+      icon: 'https://cdn-icons-png.flaticon.com/512/1087/1087815.png',
+      badge: 'https://cdn-icons-png.flaticon.com/512/1087/1087815.png',
+      vibrate: [200, 100, 200],
+      requireInteraction: true
+    });
+    notification.onclick = function() {
+      window.focus();
+      this.close();
+    };
+  }
+  // Toca som
+  try {
+    const audio = new Audio('https://cdn.pixabay.com/download/audio/2021/08/04/audio_0625c8d3d2.mp3?filename=notification-sound-7062.mp3');
+    audio.play().catch(e => console.log('Audio bloqueado'));
+  } catch(e) {}
+}
+
+// Polling para novos atendimentos
+let ultimoTotal = 0;
+let clientesPausados = new Set();
+setInterval(() => {
+  fetch('/admin/api/status')
+    .then(r => r.json())
+    .then(data => {
+      const totalPausados = data.pausados;
+      if (totalPausados.length > ultimoTotal && ultimoTotal !== 0) {
+        const novos = totalPausados.filter(c => !clientesPausados.has(c));
+        novos.forEach(c => {
+          notificarNovoAtendimento(c.numero, c.motivo);
+        });
+      }
+      ultimoTotal = totalPausados.length;
+      clientesPausados = new Set(totalPausados.map(c => c.numero));
+      // Atualiza contador no título
+      if (totalPausados.length > 0) {
+        document.title = `(${totalPausados.length}) 🔔 Obras Gestão - Atendimento`;
+        document.getElementById('contador').innerHTML = `${totalPausados.length} cliente(s) aguardando atendimento!`;
+        document.getElementById('contador').style.display = 'block';
+      } else {
+        document.title = 'Obras Gestão - Painel Atendimento';
+        document.getElementById('contador').style.display = 'none';
+      }
+    })
+    .catch(e => console.log('Erro polling', e));
+}, 5000);
+
+// Inicializa
+setTimeout(() => {
+  if (Notification.permission !== 'granted' && Notification.permission !== 'denied') {
+    document.getElementById('notifBtn').style.display = 'block';
+  }
+  ultimoTotal = document.querySelectorAll('.pausado').length;
+}, 2000);
+</script>
 </body>
 </html>
     """
