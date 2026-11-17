@@ -115,6 +115,7 @@ Qual faz mais sentido pra você?
 1️⃣ Obra civil - contratar/fiscalizar
 2️⃣ Obra civil - executar (mais escolhido)
 3️⃣ Energia solar
+0️⃣ Falar com atendente
 
 Cliente: quero conhecer / o que faz / como funciona
 Você: Show! O Obras Gestão é completo:
@@ -206,7 +207,7 @@ Quer que eu te mande?
 
 Sobre IA: Se perguntarem dos agentes, explique: "Os agentes funcionam com IA da sua empresa. Você cadastra sua chave (Anthropic, OpenAI, Gemini) em Configurações e paga uso direto ao provedor, mensalidade não inclui. Sem chave, respondem só com dados do sistema."
 
-Sempre termine com opções. Nunca vago. Curto, 2-3 linhas + opções. Emoji moderado. Nunca diga que é IA, você é da equipe. Sempre "um atendente da nossa equipe". Teste grátis sem cartão em obrasgestao.com. Se pedir atendente 2x, transfere e avisa 31 98431-1221 e 27 99201-2689.
+Sempre termine com opções incluindo 0️⃣ Falar com atendente. Nunca vago. Curto, 2-3 linhas + opções. Emoji moderado. Nunca diga que é IA, você é da equipe. Sempre "um atendente da nossa equipe". Teste grátis sem cartão em obrasgestao.com. Se pedir atendente 2x, transfere e avisa 31 98431-1221 e 27 99201-2689.
 """
 
 def gerar_com_groq_http(historico):
@@ -304,15 +305,17 @@ def notificar_atendimento(numero_cliente, historico, motivo="Cliente pediu atend
         log(f">>> Erro notificar_atendimento: {e}")
 
 def deve_transferir(texto, historico):
-    texto_lower = texto.lower()
-    gatilhos_fortes = ["atendente", "humano", "pessoa real", "falar com alguém", "quero falar com pessoa", "me passa pra pessoa"]
-    historico_texto = " ".join([m["content"].lower() for m in historico[-4:]])
-    ja_pediu = "atendente" in historico_texto or "humano" in historico_texto
-    if any(g in texto_lower for g in gatilhos_fortes):
-        if ja_pediu and len(texto_lower) < 50:
-            return True, "Cliente insistiu em falar com atendente"
-        return False, "Primeira vez - tentar resolver"
-    palavras_criticas = ["não consigo entrar", "sistema fora do ar", "perdi meus dados", "erro crítico", "urgente", "não estou conseguindo acessar"]
+    texto_lower = texto.lower().strip()
+    # Se cliente digitar só "atendente", "0", "falar com atendente" - transfere direto
+    gatilhos_diretos = ["atendente", "0", "falar com atendente", "quero atendente", "atendimento", "humano", "pessoa", "falar com humano", "quero falar com humano"]
+    # Se texto é exatamente um gatilho direto, transfere na hora
+    if texto_lower in gatilhos_diretos or any(texto_lower == g for g in gatilhos_diretos):
+        return True, f"Cliente pediu atendente direto: {texto}"
+    # Se contém atendente em frase curta, transfere
+    if ("atendente" in texto_lower or "humano" in texto_lower) and len(texto_lower) < 40:
+        return True, f"Cliente pediu atendente: {texto}"
+    # Suporte crítico
+    palavras_criticas = ["não consigo entrar", "sistema fora do ar", "perdi meus dados", "erro crítico", "urgente", "não estou conseguindo acessar", "não funciona", "bug"]
     if any(p in texto_lower for p in palavras_criticas):
         return True, f"Suporte critico: {texto}"
     return False, "Resolver na conversa"
