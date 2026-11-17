@@ -21,7 +21,7 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-log(f"ENV - PHONE:{PHONE_NUMBER_ID} GEMINI:{bool(GEMINI_API_KEY)} GROQ:{bool(GROQ_API_KEY)} WA:{bool(WHATSAPP_TOKEN)}")
+log(f"ENV - PHONE:{PHONE_NUMBER_ID} GROQ:{bool(GROQ_API_KEY)} GEMINI:{bool(GEMINI_API_KEY)} WA:{bool(WHATSAPP_TOKEN)}")
 
 gemini_client = None
 if HAS_GEMINI and GEMINI_API_KEY:
@@ -61,18 +61,31 @@ def gerar_com_groq_http(historico):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + historico[-12:]
-    data = {
-        "model": "llama-3.3-70b-versatile",
-        "messages": messages,
-        "temperature": 0.7,
-        "max_tokens": 600
-    }
-    r = requests.post(url, headers=headers, json=data, timeout=20)
-    log(f">>> Groq HTTP status={r.status_code} body={r.text[:800]}")
-    if r.status_code != 200:
-        raise Exception(f"Groq HTTP {r.status_code}: {r.text[:300]}")
-    j = r.json()
-    return j["choices"][0]["message"]["content"]
+    
+    modelos = ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"]
+    last_error = ""
+    for modelo in modelos:
+        try:
+            log(f">>> Tentando Groq modelo: {modelo}")
+            data = {
+                "model": modelo,
+                "messages": messages,
+                "temperature": 0.7,
+                "max_tokens": 600
+            }
+            r = requests.post(url, headers=headers, json=data, timeout=25)
+            log(f">>> Groq {modelo} status={r.status_code} body={r.text[:600]}")
+            if r.status_code == 200:
+                j = r.json()
+                return j["choices"][0]["message"]["content"]
+            else:
+                last_error = f"{r.status_code}: {r.text[:400]}"
+                continue
+        except Exception as e:
+            last_error = str(e)
+            log(f">>> Erro {modelo}: {e}")
+            continue
+    raise Exception(f"Todos modelos Groq falharam. Ultimo: {last_error}")
 
 def gerar_com_gemini(historico):
     if not gemini_client:
@@ -89,7 +102,7 @@ def gerar_com_gemini(historico):
 def gerar_resposta_ia(historico):
     if GROQ_API_KEY:
         try:
-            log(">>> Tentando Groq HTTP (principal)...")
+            log(">>> Tentando Groq HTTP...")
             resp = gerar_com_groq_http(historico)
             log(f">>> Groq OK: {resp[:150]}")
             return resp
@@ -97,7 +110,7 @@ def gerar_resposta_ia(historico):
             log(f">>> Groq falhou: {e}")
     if gemini_client:
         try:
-            log(">>> Tentando Gemini (fallback)...")
+            log(">>> Tentando Gemini...")
             resp = gerar_com_gemini(historico)
             log(f">>> Gemini OK: {resp[:150]}")
             return resp
@@ -114,7 +127,7 @@ def enviar_whatsapp(to, text):
     payload = {"messaging_product": "whatsapp", "to": to, "type": "text", "text": {"body": text[:4000]}}
     try:
         r = requests.post(url, headers=headers, json=payload, timeout=20)
-        log(f">>> Envio WhatsApp status={r.status_code} body={r.text[:800]}")
+        log(f">>> Envio WhatsApp status={r.status_code}")
         return r
     except Exception as e:
         log(f">>> Erro envio WhatsApp: {e}")
@@ -152,13 +165,7 @@ def webhook():
                 for msg in value["messages"]:
                     from_number = msg.get("from")
                     msg_type = msg.get("type")
-                    text_user = ""
-                    if msg_type == "text":
-                        text_user = msg.get("text", {}).get("body", "")
-                    elif msg_type == "button":
-                        text_user = msg.get("button", {}).get("text", "")
-                    else:
-                        text_user = msg.get("text", {}).get("body", "") or ""
+                    text_user = msg.get("text", {}).get("body", "") if msg_type == "text" else ""
                     if not text_user:
                         continue
                     log(f">>> MSG de {from_number}: {text_user}")
