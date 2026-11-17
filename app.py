@@ -62,7 +62,7 @@ def gerar_com_groq_http(historico):
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + historico[-12:]
     
-    modelos = ["llama3-8b-8192", "llama3-70b-8192", "mixtral-8x7b-32768", "gemma2-9b-it"]
+    modelos = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3-32b", "llama-3.3-70b-versatile"]
     last_error = ""
     for modelo in modelos:
         try:
