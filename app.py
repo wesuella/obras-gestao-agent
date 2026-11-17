@@ -283,27 +283,15 @@ def enviar_whatsapp(to, text):
         log(f">>> Erro envio WhatsApp: {e}")
         return None
 
-def notificar_atendimento(numero_cliente, historico, motivo="Cliente pediu atendente"):
+def notificar_atendimento(numero, hist, motivo):
+    msg = f"🔔 Cliente +{numero} quer atendente"
     try:
-        resumo = ""
-        for m in historico[-4:]:
-            quem = "Cliente" if m["role"]=="user" else "Bot"
-            resumo += f"{quem}: {m['content'][:80]} | "
-        mensagem_alerta = f"🔔 NOVO ATENDIMENTO OBRAS GESTÃO - Cliente: +{numero_cliente} - Motivo: {motivo} - Historico: {resumo} - Link: https://wa.me/{numero_cliente} - Responda pelo WhatsApp Business do 28 99252-5654"
-        try:
-            enviar_whatsapp(NUMERO_ENGENHARIA, mensagem_alerta)
-            log(f">>> Alerta enviado para Engenharia {NUMERO_ENGENHARIA}")
-        except Exception as e:
-            log(f">>> Erro alerta engenharia: {e}")
-        try:
-            enviar_whatsapp(NUMERO_ATENDIMENTO, mensagem_alerta)
-            log(f">>> Alerta enviado para Atendimento {NUMERO_ATENDIMENTO}")
-        except Exception as e:
-            log(f">>> Erro alerta atendimento: {e}")
-        log(f">>> Transferência registrada para {numero_cliente} - Email fallback: {EMAIL_CONTATO}")
-    except Exception as e:
-        log(f">>> Erro notificar_atendimento: {e}")
-
+        enviar_whatsapp(NUMERO_ENGENHARIA, msg)
+        enviar_whatsapp(NUMERO_ATENDIMENTO, msg)
+    except:
+        pass
+    return
+# --- FIM notificar simplificado ---
 def deve_transferir(texto, historico):
     texto_lower = texto.lower().strip()
     # Se cliente digitar só "atendente", "0", "falar com atendente" - transfere direto
@@ -367,9 +355,15 @@ def webhook():
                     precisa, motivo = deve_transferir(text_user, hist)
                     if precisa:
                         log(f">>> TRANSFERENCIA: {motivo}")
-                        resposta = f"Claro! Já avisei nosso atendimento (27 99201-2689) e engenharia. Eles vão te responder por aqui em poucos minutos. Enquanto isso, se quiser, já pode ver os planos em obrasgestao.com 😉 Se for urgente, chama direto no 27 99201-2689"
+                        resposta = "Você será transferido para o atendente humano."
                         enviar_whatsapp(from_number, resposta)
-                        notificar_atendimento(from_number, hist, motivo)
+                        # Notificação simplificada
+                        try:
+                            msg_sup = f"🔔 Cliente +{from_number} quer atendente"
+                            enviar_whatsapp(NUMERO_ENGENHARIA, msg_sup)
+                            enviar_whatsapp(NUMERO_ATENDIMENTO, msg_sup)
+                        except:
+                            pass
                         conversas_pausadas[from_number] = time.time()
                         conversas[from_number] = hist
                         continue
