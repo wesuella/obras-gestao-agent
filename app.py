@@ -1,4 +1,4 @@
-import os, json, requests, sys
+import os, json, requests, sys, time
 from flask import Flask, request, jsonify
 
 def log(msg):
@@ -31,7 +31,15 @@ if HAS_GEMINI and GEMINI_API_KEY:
     except Exception as e:
         log(f"Erro Gemini: {e}")
 
-SYSTEM_PROMPT = """Você é o especialista comercial do Obras Gestão, sistema da WS Conecta Soluções Integradas LTDA.
+# Numeros de atendimento
+NUMERO_ENGENHARIA = "5531984311221"
+NUMERO_ATENDIMENTO = "5527992012689"
+EMAIL_CONTATO = "contato@obrasgestao.com"
+
+conversas = {}
+conversas_pausadas = {}
+
+SYSTEM_PROMPT = """Você é o especialista comercial do Obras Gestão, da WS Conecta Soluções Integradas LTDA.
 
 Você NÃO segue um script fixo de perguntas e respostas. Você tem CONHECIMENTO PROFUNDO sobre o Obras Gestão e responde de acordo com o que o cliente precisa, de forma natural, consultiva e inteligente, como um humano que vive obra.
 
@@ -41,96 +49,32 @@ O QUE É:
 Obras Gestão é a plataforma completa para empresas de obras, operações, energia solar e equipes de campo. Frase oficial: "Gestão completa de obras, energia solar e execução, em um só sistema. Controle sua empresa de ponta a ponta: contratos, medições, propostas, equipe e financeiro, sem planilha solta."
 Funciona no navegador do celular e computador, sem instalar nada. Cada empresa só vê seus próprios dados, com segurança. Empresa: WS Conecta Soluções Integradas LTDA, Avenida Itapemirim 1491, contato@obrasgestao.com.
 
-COMO FUNCIONA:
-Cada módulo tem agentes de IA especialistas com nomes bíblicos (Jetro, Bezalel, Salomão, Urim, Hirao, Neemias, José, Amós, etc), mas eles não pregam, só leem dados e sugerem. Nenhuma ação sem confirmação humana. Cada empresa usa sua própria chave de IA (Anthropic, OpenAI, Gemini) cadastrada em Configurações. Mensalidade não inclui custo da IA. Sem chave, os agentes respondem só com dados do sistema.
+PLANOS:
+- Obras Gestão: R$149,90/mês nos primeiros 6 meses (era R$249,90), depois R$249,90. 2 usuários. Para quem contrata e fiscaliza: carteira com mapa, prazos, medições, contratos com assinatura eletrônica, cronograma com curva S, orçamento base SINAPI, auditoria, financeiro por obra.
+- Obras Operações: R$149,90/mês nos 6 primeiros (era R$249,90), depois R$249,90. 2 usuários. MAIS ESCOLHIDO. Para quem executa: proposta com BDI fórmula TCU Acórdão 2622/2013 que vira obra com 1 clique, medição por avanço físico, NF com ISS/INSS retidos, apontamento de equipe, custo por dia, financeiro.
+- Solar Gestão: R$249,90/mês nos 6 primeiros (era R$349,90), depois R$349,90. 2 usuários. Para integradoras: busca tarifa e Fio B ANEEL pelo CEP, dimensionamento, payback, diagrama unifilar, memorial técnico, checklist NR-35.
+- Usuário extra: R$39,90/mês. Promoção Lançamento até 31/01/2027.
 
-MÓDULOS E O QUE FAZEM:
+FUNCIONALIDADES:
+- Adeus Planilhas: substitui controle manual, agentes IA especialistas
+- Medições e Financeiro Real: físico e financeiro em tempo real, alertas de desvio
+- Auditoria de Orçamentos GRÁTIS: cliente envia PDF/Excel/CSV e recebe nota de coerência vs SINAPI. Parecer: Coerente, Com Ressalvas ou Não Coerente. Uma grátis por e-mail.
+- Cálculos: BDI TCU, ISS/INSS, aditivos, reajuste, curva S, dimensionamento NBR 5410
+- Estoque, campo, visita com mapa e fotos, diário com clima
 
-1. Obras Gestão (R$149,90/mês nos 6 primeiros meses, era R$249,90, depois R$249,90) - Para quem CONTRATA e FISCALIZA:
-   - Carteira de obras com mapa
-   - Prazos e alertas
-   - Medições com conferência
-   - Contratos com assinatura eletrônica
-   - Cronograma com curva S e previsão de término
-   - Orçamento base SINAPI
-   - Auditoria de orçamentos
-   - Financeiro por obra
-   - 2 usuários inclusos
-
-2. Obras Operações (R$149,90/mês nos 6 primeiros, era R$249,90, depois R$249,90) - MAIS ESCOLHIDO - Para quem EXECUTA:
-   - Proposta com BDI fórmula TCU Acórdão 2622/2013 que vira obra com 1 clique
-   - Medição por avanço físico
-   - NF com ISS/INSS retidos automaticamente
-   - Apontamento de equipe
-   - Custo por dia
-   - Financeiro completo
-   - Levantamento de materiais
-   - 2 usuários inclusos
-
-3. Solar Gestão (R$249,90/mês nos 6 primeiros, era R$349,90, depois R$349,90) - Para INTEGRADORAS:
-   - Cliente e negociação
-   - Busca automática de tarifa e Fio B ANEEL pelo CEP
-   - Dimensionamento solar
-   - Payback
-   - Diagrama unifilar
-   - Memorial técnico
-   - Documentos da concessionária
-   - Checklist NR-35
-   - Diário e comissionamento
-   - 2 usuários inclusos
-
-EXTRA: Usuário extra R$39,90/mês. Promoção Lançamento até 31/01/2027. Preço promocional válido até 10/01/2027.
-
-FUNCIONALIDADES CHAVE QUE VOCÊ DOMINA:
-
-- Adeus Planilhas & Automação com IA: substitui controle manual, agentes IA especialistas por módulo
-- Medições e Controle Financeiro Real: acompanha físico e financeiro em tempo real, alertas de desvio, margens seguras
-- Operação, Canteiro Próprio e Assistência de Agentes: centraliza custos, insumos, diário, chat com central
-- Auditoria de Orçamentos GRÁTIS (isca poderosa): cliente envia PDF/Excel/CSV de orçamento e em segundos recebe nota de coerência frente ao SINAPI e pesquisa de preço da cidade da obra. Parecer: Coerente, Com Ressalvas ou Não Coerente. Uma auditoria grátis por e-mail. Quando o mais barato não é o mais coerente, sistema avisa. Use quando cliente está em dúvida ou quer prova.
-- Cálculos sempre iguais: BDI fórmula TCU, ISS/INSS, aditivos vs limite contrato, reajuste por índice, previsão de término curva S, dimensionamento circuito NBR 5410
-- Estoque: por depósito, custo médio, transferência, reserva por obra, inventário, número de série
-- Campo: visita com mapa e fotos, diário com clima, serviços, ocorrências, formulários concessionária
-
-DORES QUE VOCÊ RESOLVE (fale com propriedade):
-- Planilha que vira bagunça, erro, perde dado
-- Medição que atrasa, não bate com financeiro
-- Proposta que demora, BDI errado, perde obra
-- Equipe em campo sem controle, custo por dia desconhecido
-- Financeiro por obra que não fecha
-- Orçamento que parece barato mas não é coerente com SINAPI
-- Solar com tarifa errada, dimensionamento na mão, documento faltando
-
-COMO VOCÊ CONVERSA (natural, inteligente, não script):
-
-- Você é consultivo, não robótico. Ouve o cliente, entende a dor, explica como o Obras Gestão resolve aquela dor específica.
-- Respostas curtas, 2-3 linhas no WhatsApp, mas com CONTEÚDO, não pergunta genérica.
-- Você adapta: se cliente é da civil, fala de medição, contrato, curva S. Se é solar, fala de tarifa ANEEL, dimensionamento, memorial.
-- Se cliente fala "planilha", você fala da dor da planilha e como o sistema resolve.
-- Se fala "equipe", fala de apontamento, custo por dia, diário.
-- Se fala "financeiro", fala de NF com ISS/INSS, custo por obra, margem.
-- Se fala "proposta", fala de BDI TCU, virar obra com 1 clique.
-- Se fala "preço", você dá os preços com contexto, não seco. Explica que tem 14 dias grátis sem cartão, que pode testar direto em obrasgestao.com.
-- Você sempre termina com uma pergunta inteligente que faz avançar, mas baseada no que cliente falou, não genérica. Exemplos:
-  - Se falou de planilha: "Qual parte da planilha te dá mais dor hoje? Medição, financeiro ou equipe?"
-  - Se falou de equipe: "Hoje você sabe quanto custa cada dia de equipe por obra?"
-  - Se falou de medição: "Sua medição hoje bate certinho com o financeiro ou fica diferença?"
-  - Se falou de proposta: "Sua proposta hoje já sai com BDI no padrão TCU ou calcula na mão?"
-  - Se falou de solar: "Você busca a tarifa e Fio B da ANEEL na mão por CEP ou já tem automático?"
-
-- Você pode usar sim/não quando fizer sentido, mas de forma natural: "Faz sentido pra você? Sim ou não?", "Quer que eu te mande o link? Sim ou não?", "Te interessa uma auditoria grátis do seu orçamento pra ver se tá coerente com SINAPI?"
-
-- Nunca fale que é IA. Você é da equipe Obras Gestão.
-- Nunca peça cartão. Sempre teste direto pelo site: obrasgestao.com > Ver Planos > Escolher este plano.
-- Sempre "um atendente da nossa equipe", nunca nome.
-- Se pedir atendente/humano/pessoa: "Claro! Vou te passar para um atendente da nossa equipe agora, ele já recebe todo seu histórico aqui. Só um segundo 😉"
-
-- Se pedir desconto além da promoção, contrato grande, parceria: transfira para atendente.
-
-- Você NÃO repete a mesma pergunta. Usa o histórico da conversa.
-
-- Você é especialista: se cliente perguntar algo técnico (BDI, SINAPI, curva S, ISS/INSS, Fio B, NR-35), você responde com propriedade, porque você conhece.
-
-OBJETIVO FINAL: Fazer o cliente entender que o Obras Gestão resolve a dor dele e levar para testar grátis 14 dias sem cartão em obrasgestao.com ou falar com um atendente.
+COMO CONVERSAR:
+- Natural, humano, curto, 2-3 linhas, emoji moderado, nunca diga que é IA.
+- Consultivo: entende a dor, explica como Obras Gestão resolve aquela dor específica.
+- Se fala de equipe, fala de apontamento, custo por dia. Se financeiro, NF ISS/INSS, margem. Se proposta, BDI TCU. Se medição, avanço físico vs financeiro. Se solar, tarifa ANEEL por CEP.
+- Se planilha, oferece auditoria grátis SINAPI.
+- Nunca repita mesma pergunta, usa histórico.
+- Termine com pergunta inteligente baseada no que cliente falou.
+- Pode usar sim/não natural: "Faz sentido? Sim ou não?", "Quer link? Sim ou não?"
+- Nunca peça cartão, sempre teste direto: obrasgestao.com > Ver Planos > Escolher este plano.
+- Sempre "um atendente da nossa equipe".
+- Se pedir atendente/humano, tente resolver primeiro, só transfere se insistir.
+- Se pedir suporte crítico (não consigo entrar, sistema fora, perdi dados, urgente), transfere.
+- Objetivo: levar para testar grátis 14 dias sem cartão ou falar com atendente.
 """
 
 def gerar_com_groq_http(historico):
@@ -139,25 +83,20 @@ def gerar_com_groq_http(historico):
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + historico[-12:]
-    
     modelos = ["openai/gpt-oss-20b", "openai/gpt-oss-120b", "qwen/qwen3-32b", "llama-3.3-70b-versatile"]
     last_error = ""
     for modelo in modelos:
         try:
             log(f">>> Tentando Groq modelo: {modelo}")
-            data = {
-                "model": modelo,
-                "messages": messages,
-                "temperature": 0.7,
-                "max_tokens": 600
-            }
+            data = {"model": modelo, "messages": messages, "temperature": 0.7, "max_tokens": 600}
             r = requests.post(url, headers=headers, json=data, timeout=25)
-            log(f">>> Groq {modelo} status={r.status_code} body={r.text[:600]}")
+            log(f">>> Groq {modelo} status={r.status_code}")
             if r.status_code == 200:
                 j = r.json()
                 return j["choices"][0]["message"]["content"]
             else:
                 last_error = f"{r.status_code}: {r.text[:400]}"
+                log(f">>> Falhou {modelo}: {last_error[:200]}")
                 continue
         except Exception as e:
             last_error = str(e)
@@ -211,81 +150,44 @@ def enviar_whatsapp(to, text):
         log(f">>> Erro envio WhatsApp: {e}")
         return None
 
-
-# === NUMEROS DE ATENDIMENTO ===
-NUMERO_ENGENHARIA = "5531984311221"  # 31 98431-1221
-NUMERO_ATENDIMENTO = "5527992012689"  # 27 99201-2689
-EMAIL_CONTATO = "contato@obrasgestao.com"
-
 def notificar_atendimento(numero_cliente, historico, motivo="Cliente pediu atendente"):
-    """Notifica engenharia e atendimento via WhatsApp quando precisa transferir"""
     try:
-        resumo_historico = "
-".join([f"{'Cliente' if m['role']=='user' else 'Bot'}: {m['content'][:100]}" for m in historico[-6:]])
-        mensagem_alerta = f"""🔔 *NOVO ATENDIMENTO OBRAS GESTÃO*
-
-*Cliente:* +{numero_cliente}
-*Motivo:* {motivo}
-
-*Últimas mensagens:*
-{resumo_historico}
-
-*Link direto:* https://wa.me/{numero_cliente}
-
-_Responda pelo WhatsApp Business do 28 99252-5654_"""
-
-        # Notifica Engenharia
+        resumo = ""
+        for m in historico[-4:]:
+            quem = "Cliente" if m["role"]=="user" else "Bot"
+            resumo += f"{quem}: {m['content'][:80]} | "
+        mensagem_alerta = f"🔔 NOVO ATENDIMENTO OBRAS GESTÃO - Cliente: +{numero_cliente} - Motivo: {motivo} - Historico: {resumo} - Link: https://wa.me/{numero_cliente} - Responda pelo WhatsApp Business do 28 99252-5654"
         try:
             enviar_whatsapp(NUMERO_ENGENHARIA, mensagem_alerta)
             log(f">>> Alerta enviado para Engenharia {NUMERO_ENGENHARIA}")
         except Exception as e:
             log(f">>> Erro alerta engenharia: {e}")
-
-        # Notifica Atendimento
         try:
             enviar_whatsapp(NUMERO_ATENDIMENTO, mensagem_alerta)
             log(f">>> Alerta enviado para Atendimento {NUMERO_ATENDIMENTO}")
         except Exception as e:
             log(f">>> Erro alerta atendimento: {e}")
-
-        # TODO: Email fallback se não atender em 10 min - pode integrar com SendGrid/Mailgun depois
         log(f">>> Transferência registrada para {numero_cliente} - Email fallback: {EMAIL_CONTATO}")
-
     except Exception as e:
         log(f">>> Erro notificar_atendimento: {e}")
 
 def deve_transferir(texto, historico):
-    """Decide se realmente precisa transferir ou pode resolver na conversa"""
     texto_lower = texto.lower()
-    
-    # Palavras que indicam que cliente QUER MUITO falar com humano
     gatilhos_fortes = ["atendente", "humano", "pessoa real", "falar com alguém", "quero falar com pessoa", "me passa pra pessoa"]
-    
-    # Se cliente já pediu atendente antes e pediu de novo, transfere
     historico_texto = " ".join([m["content"].lower() for m in historico[-4:]])
-    ja_pediu_atendente = "atendente" in historico_texto or "humano" in historico_texto
-    
+    ja_pediu = "atendente" in historico_texto or "humano" in historico_texto
     if any(g in texto_lower for g in gatilhos_fortes):
-        if ja_pediu_atendente and len(texto_lower) < 50:
-            # Pediu 2 vezes, realmente quer humano
+        if ja_pediu and len(texto_lower) < 50:
             return True, "Cliente insistiu em falar com atendente"
-        # Primeira vez que pede, tenta resolver primeiro
-        return False, "Primeira vez que pede atendente - tentar resolver na conversa"
-    
-    # Suporte - tenta resolver na conversa primeiro, só transfere se for erro crítico
-    palavras_suporte_critico = ["não consigo entrar", "sistema fora do ar", "perdi meus dados", "erro crítico", "urgente", "não estou conseguindo acessar"]
-    if any(p in texto_lower for p in palavras_suporte_critico):
-        return True, f"Suporte crítico: {texto}"
-    
+        return False, "Primeira vez - tentar resolver"
+    palavras_criticas = ["não consigo entrar", "sistema fora do ar", "perdi meus dados", "erro crítico", "urgente", "não estou conseguindo acessar"]
+    if any(p in texto_lower for p in palavras_criticas):
+        return True, f"Suporte critico: {texto}"
     return False, "Resolver na conversa"
-
-conversas = {}
-# Controle de pausa por transferência
-conversas_pausadas = {}
 
 @app.route("/", methods=["GET"])
 def home():
-    return f"Agente Obras Gestão GROQ HTTP no ar! Groq:{'OK' if GROQ_API_KEY else 'OFF'} Gemini:{'OK' if gemini_client else 'OFF'} Phone:{PHONE_NUMBER_ID}"
+    return f"Agente Obras Gestão no ar! Groq:{'OK' if GROQ_API_KEY else 'OFF'} Gemini:{'OK' if gemini_client else 'OFF'} Phone:{PHONE_NUMBER_ID}"
 
 @app.route("/webhook", methods=["GET"])
 def verify():
@@ -316,14 +218,28 @@ def webhook():
                     text_user = msg.get("text", {}).get("body", "") if msg_type == "text" else ""
                     if not text_user:
                         continue
+                    if from_number in conversas_pausadas:
+                        pausa = conversas_pausadas[from_number]
+                        if time.time() - pausa < 7200:
+                            log(f">>> Cliente {from_number} em atendimento humano, bot pausado")
+                            continue
+                        else:
+                            del conversas_pausadas[from_number]
+                            log(f">>> Pausa expirou para {from_number}, bot voltou")
                     log(f">>> MSG de {from_number}: {text_user}")
                     hist = conversas.get(from_number, [])
                     hist.append({"role": "user", "content": text_user})
-                    if any(p in text_user.lower() for p in ["atendente", "humano", "pessoa"]) and len(text_user) < 35:
-                        resposta = "Claro! Vou te passar para um atendente da nossa equipe agora, ele já vai receber todo o seu histórico aqui, só um segundo. 😉 Enquanto isso, você já pode ver os planos em obrasgestao.com"
+                    precisa, motivo = deve_transferir(text_user, hist)
+                    if precisa:
+                        log(f">>> TRANSFERENCIA: {motivo}")
+                        resposta = f"Claro! Já avisei nosso atendimento (27 99201-2689) e engenharia. Eles vão te responder por aqui em poucos minutos. Enquanto isso, se quiser, já pode ver os planos em obrasgestao.com 😉 Se for urgente, chama direto no 27 99201-2689"
                         enviar_whatsapp(from_number, resposta)
+                        notificar_atendimento(from_number, hist, motivo)
+                        conversas_pausadas[from_number] = time.time()
                         conversas[from_number] = hist
                         continue
+                    elif any(p in text_user.lower() for p in ["atendente", "humano", "pessoa"]) and len(text_user) < 35:
+                        log(f">>> Pedido atendente primeira vez, tentando resolver")
                     resposta_ia = gerar_resposta_ia(hist)
                     hist.append({"role": "assistant", "content": resposta_ia})
                     conversas[from_number] = hist[-20:]
