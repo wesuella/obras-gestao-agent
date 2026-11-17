@@ -5,22 +5,13 @@ def log(msg):
     print(msg, flush=True)
     sys.stdout.flush()
 
-# === GROQ PRINCIPAL, GEMINI FALLBACK ===
-try:
-    from groq import Groq
-    HAS_GROQ = True
-    log("groq carregado OK")
-except Exception as e:
-    HAS_GROQ = False
-    log(f"Falha groq: {e}")
-
 try:
     from google import genai
     HAS_GEMINI = True
-    log("google.genai carregado OK")
+    log("google.genai OK")
 except Exception as e:
     HAS_GEMINI = False
-    log(f"Falha google.genai: {e}")
+    log(f"Falha genai: {e}")
 
 app = Flask(__name__)
 
@@ -30,68 +21,58 @@ PHONE_NUMBER_ID = os.getenv("PHONE_NUMBER_ID")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-log(f"ENV CHECK - PHONE:{PHONE_NUMBER_ID} GEMINI:{bool(GEMINI_API_KEY)} GROQ:{bool(GROQ_API_KEY)} WA:{bool(WHATSAPP_TOKEN)}")
-
-groq_client = None
-if HAS_GROQ and GROQ_API_KEY:
-    try:
-        groq_client = Groq(api_key=GROQ_API_KEY)
-        log("Groq Client criado OK")
-    except Exception as e:
-        log(f"Erro Groq Client: {e}")
+log(f"ENV - PHONE:{PHONE_NUMBER_ID} GEMINI:{bool(GEMINI_API_KEY)} GROQ:{bool(GROQ_API_KEY)} WA:{bool(WHATSAPP_TOKEN)}")
 
 gemini_client = None
 if HAS_GEMINI and GEMINI_API_KEY:
     try:
         gemini_client = genai.Client(api_key=GEMINI_API_KEY)
-        log("Gemini Client criado OK")
+        log("Gemini Client OK")
     except Exception as e:
-        log(f"Erro Gemini Client: {e}")
+        log(f"Erro Gemini: {e}")
 
-SYSTEM_PROMPT = """
-Você é o atendente comercial do Obras Gestão, da WS Conecta Soluções Integradas LTDA.
+SYSTEM_PROMPT = """Você é o atendente comercial do Obras Gestão, da WS Conecta Soluções Integradas LTDA.
 OBJETIVO: Levar a pessoa a testar grátis 14 dias em obrasgestao.com ou falar com um atendente da nossa equipe.
 
-TOM: Direto, simpático, entende de obra. Brasileiro que vive obra. Mensagens curtas, 2-3 linhas no WhatsApp, nunca textão. Emoji moderado (1-2). Nunca diga que é IA, você é da equipe Obras Gestão.
+TOM: Direto, simpático, entende de obra. Brasileiro que vive obra. Mensagens curtas, 2-3 linhas no WhatsApp, nunca textão. Emoji moderado (1-2). Nunca diga que é IA, você é da equipe.
 
-PRODUTO:
-Obras Gestão é plataforma só para obras, operações, energia solar e equipes de campo, com agentes de IA em cada área.
-Frase oficial: "Gestão completa de obras, energia solar e execução, em um só sistema. Controle sua empresa de ponta a ponta: contratos, medições, propostas, equipe e financeiro, sem planilha solta."
-Funciona no navegador do celular e PC, sem instalar. Cada empresa só vê próprios dados. Teste grátis 14 dias sem cartão, direto em obrasgestao.com. Empresa: WS Conecta Soluções Integradas LTDA.
+PRODUTO: Obras Gestão é plataforma só para obras, operações, energia solar e equipes de campo. "Gestão completa de obras, energia solar e execução, em um só sistema. Controle sua empresa de ponta a ponta: contratos, medições, propostas, equipe e financeiro, sem planilha solta." Funciona no navegador, sem instalar. Teste grátis 14 dias sem cartão, em obrasgestao.com.
 
-PLANOS E PREÇOS - USE APENAS ISSO, NUNCA INVENTE:
-- Obras Gestão: R$149,90/mês nos primeiros 6 meses (era R$249,90), depois R$249,90. 2 usuários inclusos. Para quem contrata e fiscaliza: carteira com mapa, prazos, medições, contratos com assinatura eletrônica, cronograma com curva S, orçamento base SINAPI, auditoria, financeiro por obra.
-- Obras Operações: R$149,90/mês nos 6 primeiros meses (era R$249,90), depois R$249,90. 2 usuários. MAIS ESCOLHIDO. Para quem executa: proposta com BDI fórmula TCU Acórdão 2622/2013 que vira obra com 1 clique, medição por avanço físico, NF com ISS/INSS retidos, apontamento de equipe, custo por dia, financeiro.
-- Solar Gestão: R$249,90/mês nos 6 primeiros (era R$349,90), depois R$349,90. 2 usuários. Para integradoras: cliente, busca tarifa e Fio B ANEEL pelo CEP, dimensionamento, payback, diagrama unifilar, memorial técnico.
+PLANOS:
+- Obras Gestão: R$149,90/mês nos primeiros 6 meses (era R$249,90), depois R$249,90. 2 usuários. Para quem contrata e fiscaliza.
+- Obras Operações: R$149,90/mês nos 6 primeiros (era R$249,90), depois R$249,90. 2 usuários. MAIS ESCOLHIDO. Para quem executa.
+- Solar Gestão: R$249,90/mês nos 6 primeiros (era R$349,90), depois R$349,90. 2 usuários. Para integradoras.
 - Usuário extra: R$39,90/mês. Promoção Lançamento até 31/01/2027.
 
-REGRAS DE OURO:
-1. Sempre qualifique logo: "Você trabalha com obra civil, energia solar ou os dois?" e "Hoje controla como? Planilha, caderno ou outro sistema?"
+REGRAS:
+1. Qualifique: "Você trabalha com obra civil, energia solar ou os dois?" e "Hoje controla como? Planilha, caderno ou outro sistema?"
 2. Teste grátis: NUNCA peça cartão. Diga: "Você começa o teste grátis de 14 dias direto pelo site, sem cartão. É só entrar em obrasgestao.com, clicar em Ver Planos e Escolher este plano."
-3. Nunca fale nome do atendente. Sempre "um atendente da nossa equipe".
-4. Se pedir atendente/humano: transfira com frase pronta.
-5. Se pedir desconto além da promoção, contrato grande, parceria: transfira.
-6. Sempre termine com pergunta que faz avançar: "Qual plano faz mais sentido pra você?" ou "Quer que eu te mande o link direto do plano?"
+3. Sempre "um atendente da nossa equipe", nunca nome.
+4. Se pedir atendente/humano: transfira.
+5. Termine sempre com pergunta que faz avançar.
 
-FLUXO: Saudação -> Qualificação (civil/solar + como controla hoje) -> Dor/Solução personalizada -> Oferta teste direto site -> Se travar, oferece auditoria grátis ou atendente.
-
-EXEMPLOS:
+EXEMPLO:
 Cliente: "Quanto custa?" Você: "Temos 3 planos, todos com 14 dias grátis sem cartão em obrasgestao.com. O Obras Gestão e o Obras Operações estão por R$149,90/mês nos 6 primeiros meses (era R$249,90) por causa do lançamento até 31/01. O Solar Gestão tá R$249,90. Qual é seu caso, civil ou solar? Te digo o ideal."
-Cliente: "O que faz?" Você: "É um sistema só pra gerenciar tudo: contratos, medições, propostas, equipe e financeiro, sem planilha solta. Da proposta ao financeiro, uma info lançada uma vez. Funciona no celular e PC. Você contrata só o módulo que usa. Trabalha com obra ou solar?"
-Cliente: "Quero testar" Você: "Perfeito! É direto pelo site, sem cartão. Acessa obrasgestao.com > Ver Planos > Escolher este plano. Em 2 min você já tá dentro nos 14 dias grátis. Qual plano você quer testar? Te mando o caminho certinho."
 """
 
-def gerar_com_groq(historico):
-    if not groq_client:
-        raise Exception("Groq não configurado")
-    msgs = [{"role": "system", "content": SYSTEM_PROMPT}] + historico[-12:]
-    completion = groq_client.chat.completions.create(
-        model="llama-3.1-8b-instant",
-        messages=msgs,
-        temperature=0.7,
-        max_tokens=600
-    )
-    return completion.choices[0].message.content
+def gerar_com_groq_http(historico):
+    if not GROQ_API_KEY:
+        raise Exception("GROQ_API_KEY vazio")
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+    messages = [{"role": "system", "content": SYSTEM_PROMPT}] + historico[-12:]
+    data = {
+        "model": "llama-3.1-8b-instant",
+        "messages": messages,
+        "temperature": 0.7,
+        "max_tokens": 600
+    }
+    r = requests.post(url, headers=headers, json=data, timeout=20)
+    log(f">>> Groq HTTP status={r.status_code} body={r.text[:800]}")
+    if r.status_code != 200:
+        raise Exception(f"Groq HTTP {r.status_code}: {r.text[:300]}")
+    j = r.json()
+    return j["choices"][0]["message"]["content"]
 
 def gerar_com_gemini(historico):
     if not gemini_client:
@@ -102,23 +83,18 @@ def gerar_com_gemini(historico):
         role = "Cliente" if m["role"]=="user" else "Você"
         chat_hist += f"{role}: {m['content']}\n"
     prompt = f"{SYSTEM_PROMPT}\n\nHistórico:\n{chat_hist}\nCliente: {last_msg}\nVocê:"
-    response = gemini_client.models.generate_content(
-        model="gemini-1.5-flash",
-        contents=prompt
-    )
+    response = gemini_client.models.generate_content(model="gemini-1.5-flash", contents=prompt)
     return response.text
 
 def gerar_resposta_ia(historico):
-    # TENTA GROQ PRIMEIRO (grátis e rápido)
-    if groq_client:
+    if GROQ_API_KEY:
         try:
-            log(">>> Tentando Groq (principal)...")
-            resp = gerar_com_groq(historico)
+            log(">>> Tentando Groq HTTP (principal)...")
+            resp = gerar_com_groq_http(historico)
             log(f">>> Groq OK: {resp[:150]}")
             return resp
         except Exception as e:
             log(f">>> Groq falhou: {e}")
-    # FALLBACK GEMINI
     if gemini_client:
         try:
             log(">>> Tentando Gemini (fallback)...")
@@ -148,7 +124,7 @@ conversas = {}
 
 @app.route("/", methods=["GET"])
 def home():
-    return f"Agente Obras Gestão GROQ principal no ar! Groq:{'OK' if groq_client else 'OFF'} Gemini:{'OK' if gemini_client else 'OFF'} Phone:{PHONE_NUMBER_ID}"
+    return f"Agente Obras Gestão GROQ HTTP no ar! Groq:{'OK' if GROQ_API_KEY else 'OFF'} Gemini:{'OK' if gemini_client else 'OFF'} Phone:{PHONE_NUMBER_ID}"
 
 @app.route("/webhook", methods=["GET"])
 def verify():
@@ -166,16 +142,10 @@ def webhook():
         data = request.get_json(force=True, silent=True)
         if not data:
             return jsonify({"status": "empty"}), 200
-        # Log só se for mensagem, não status
-        if "entry" in str(data) and "messages" in str(data):
-            log(f"=== WEBHOOK MSG === {json.dumps(data)[:1200]}")
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
                 value = change.get("value", {})
                 if "statuses" in value:
-                    # só loga status sem poluir
-                    status = value["statuses"][0].get("status") if value["statuses"] else "unknown"
-                    log(f">>> Status: {status}")
                     continue
                 if "messages" not in value:
                     continue
