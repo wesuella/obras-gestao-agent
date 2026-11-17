@@ -62,7 +62,7 @@ def gerar_com_groq_http(historico):
     headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
     messages = [{"role": "system", "content": SYSTEM_PROMPT}] + historico[-12:]
     data = {
-        "model": "llama-3.1-8b-instant",
+        "model": "llama-3.3-70b-versatile",
         "messages": messages,
         "temperature": 0.7,
         "max_tokens": 600
